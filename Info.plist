@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>KeyboardFixer</string>
+    <key>CFBundleDisplayName</key>
+    <string>KeyboardFixer</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.keyboardfixer.app</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleExecutable</key>
+    <string>KeyboardFixer</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>KeyboardFixer needs Accessibility access to read the currently selected text and to send copy/paste keystrokes when you press the convert hotkey.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>KeyboardFixer sends keyboard events to convert text between Hebrew and English layouts.</string>
+</dict>
+</plist>

@@ -1,0 +1,8 @@
+# Build output
+build/
+
+# macOS
+.DS_Store
+
+# Test binaries
+/tmp/kf_tests
