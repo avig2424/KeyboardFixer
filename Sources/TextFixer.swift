@@ -6,27 +6,28 @@ enum TextFixer {
 
     private static let pasteboard = NSPasteboard.general
 
-    /// Run the conversion against the currently focused text field.
+    /// Run the conversion against the current selection, or the whole field
+    /// if nothing is selected.
     static func fixSelectedText() {
         guard ensureAccessibility() else { return }
 
         // 1. Snapshot the clipboard so we can restore it later.
         let savedItems = snapshotPasteboard()
 
-        // 2. If the focused field reports no selection, send ⌘A first.
-        if !focusedFieldHasSelection() {
+        // 2. Copy whatever is selected. ⌘C is the authoritative test for a
+        //    selection: with nothing selected, Copy is a no-op and the
+        //    pasteboard stays empty. This is reliable in every app — including
+        //    WebKit-based editors like Apple Mail, where the Accessibility
+        //    "selected text" attribute is missing and an AX probe would wrongly
+        //    report "no selection" and select the entire document.
+        if !copySelection(timeout: 0.5) {
+            // 3. Nothing was selected — select the whole field, then copy that.
             postCmdKey(.a)
             usleep(40_000)
-        }
-
-        // 3. Clear the pasteboard, then ⌘C and wait for it to populate.
-        pasteboard.clearContents()
-        let preCopyCount = pasteboard.changeCount
-        postCmdKey(.c)
-
-        guard waitForPasteboardChange(from: preCopyCount, timeout: 0.5) else {
-            restorePasteboard(savedItems)
-            return
+            guard copySelection(timeout: 0.5) else {
+                restorePasteboard(savedItems)
+                return
+            }
         }
 
         guard let copied = pasteboard.string(forType: .string), !copied.isEmpty else {
@@ -54,21 +55,17 @@ enum TextFixer {
         restorePasteboard(savedItems)
     }
 
-    // MARK: - Selection probe via Accessibility
+    // MARK: - Selection copy
 
-    private static func focusedFieldHasSelection() -> Bool {
-        let system = AXUIElementCreateSystemWide()
-        var focused: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-                system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let element = focused
-        else { return false }
-
-        var selected: AnyObject?
-        let status = AXUIElementCopyAttributeValue(
-            element as! AXUIElement, kAXSelectedTextAttribute as CFString, &selected)
-        guard status == .success, let text = selected as? String else { return false }
-        return !text.isEmpty
+    /// Clear the pasteboard, send ⌘C, and report whether non-empty text landed
+    /// on it within `timeout`. A `false` result means nothing was selected.
+    private static func copySelection(timeout: TimeInterval) -> Bool {
+        pasteboard.clearContents()
+        let before = pasteboard.changeCount
+        postCmdKey(.c)
+        guard waitForPasteboardChange(from: before, timeout: timeout) else { return false }
+        guard let s = pasteboard.string(forType: .string), !s.isEmpty else { return false }
+        return true
     }
 
     // MARK: - Accessibility
