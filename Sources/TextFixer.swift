@@ -6,6 +6,10 @@ enum TextFixer {
 
     private static let pasteboard = NSPasteboard.general
 
+    /// UserDefaults key: switch the active keyboard to the converted
+    /// language after pasting.
+    static let switchKeyboardKey = "switchKeyboardAfterConvert"
+
     /// Run the conversion against the current selection, or the whole field
     /// if nothing is selected.
     static func fixSelectedText() {
@@ -35,8 +39,9 @@ enum TextFixer {
             return
         }
 
-        // 4. Convert.
-        let converted = KeyboardConverter.convert(copied)
+        // 4. Convert, using the Hebrew layout the user actually has enabled.
+        KeyboardConverter.layout = InputSources.hebrewLayout()
+        let converted = KeyboardConverter.smartConvert(copied, isWord: isWord)
         guard converted != copied else {
             restorePasteboard(savedItems)
             return
@@ -53,6 +58,24 @@ enum TextFixer {
         // A small extra delay so the receiving app finishes reading before we overwrite.
         usleep(80_000)
         restorePasteboard(savedItems)
+
+        // 7. Keep typing in the language the text now ends in (with mixed
+        //    text, the last word is where the cursor is).
+        if UserDefaults.standard.bool(forKey: switchKeyboardKey),
+           let lastLetter = converted.last(where: { $0.isLetter }) {
+            InputSources.select(hebrew: KeyboardConverter.containsHebrew(String(lastLetter)))
+        }
+    }
+
+    /// Dictionary lookup for smart conversion, via the system spell checker.
+    private static func isWord(_ word: String, _ language: KeyboardConverter.Language) -> Bool {
+        let checker = NSSpellChecker.shared
+        let code = language == .hebrew ? "he" : "en"
+        guard checker.availableLanguages.contains(code) else { return false }
+        let miss = checker.checkSpelling(of: word, startingAt: 0, language: code,
+                                         wrap: false, inSpellDocumentWithTag: 0,
+                                         wordCount: nil)
+        return miss.location == NSNotFound
     }
 
     // MARK: - Selection copy

@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)  // no Dock icon
+        UserDefaults.standard.register(defaults: [TextFixer.switchKeyboardKey: true])
 
         buildStatusItem()
 
@@ -40,6 +41,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let switchItem = NSMenuItem(title: "Switch keyboard after converting",
+                                    action: #selector(toggleSwitchKeyboard),
+                                    keyEquivalent: "")
+        switchItem.target = self
+        switchItem.state = UserDefaults.standard.bool(forKey: TextFixer.switchKeyboardKey) ? .on : .off
+        menu.addItem(switchItem)
+
         let launchItem = NSMenuItem(title: "Launch at login",
                                     action: #selector(toggleLaunchAtLogin),
                                     keyEquivalent: "")
@@ -66,6 +74,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func convertAction() {
         runConversion()
+    }
+
+    @objc private func toggleSwitchKeyboard(_ sender: NSMenuItem) {
+        let enabled = sender.state != .on
+        UserDefaults.standard.set(enabled, forKey: TextFixer.switchKeyboardKey)
+        sender.state = enabled ? .on : .off
     }
 
     @objc private func quitAction() {

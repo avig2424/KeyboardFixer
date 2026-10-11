@@ -16,12 +16,17 @@ When you press **⌘M** (or pick *Convert selected text* from the menu):
 1. If you already have a selection, it's used as-is.
    Otherwise the app sends **⌘A** to select the whole field.
 2. The selection is copied via **⌘C**.
-3. The text is auto-detected (Hebrew if any U+0590–U+05FF character is
-   present, English otherwise) and converted using the standard Israeli
-   Hebrew ↔ QWERTY mapping.
+3. The text is converted word by word. Using the macOS spell checker (English
+   and Hebrew), each word is kept if it's already a real word, or converted if
+   its conversion is — so `שלום nv bang` becomes `שלום מה נשמע`. When nothing
+   is clearly mixed (e.g. a single word), everything is converted.
+   The mapping follows the Hebrew layout you have enabled (**Hebrew** or
+   **Hebrew-PC** — they differ on the W key: `׳` vs `'`).
 4. The result is pasted via **⌘V**.
 5. The clipboard is restored to whatever it held before, so the converted
    text never lingers there.
+6. The active keyboard switches to the language the text now ends in, so you
+   can keep typing (toggle *Switch keyboard after converting* in the menu).
 
 ## Requirements
 

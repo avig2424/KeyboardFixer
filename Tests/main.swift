@@ -106,6 +106,48 @@ check("shekel back to &", "\u{05E9}\u{20AA}\u{05DC}", "a&k")   // ש₪ל -> a&k
 check("paren back to (",  "\u{05E9})\u{05DC}", "a(k")          // ש)ל -> a(k
 check("comma back to apostrophe", "\u{05E9},\u{05DC}", "a'k")  // ש,ל -> a'k
 
+print("\n== Hebrew-PC layout (W key types a plain apostrophe) ==")
+KeyboardConverter.layout = .pc
+check("PC: w -> apostrophe", "w", "'")
+check("PC: apostrophe key -> comma", "'", ",")
+check("PC: comma -> tav", ",", "\u{05EA}")
+check("PC: how are you", "how are you",
+      "\u{05D9}\u{05DD}' \u{05E9}\u{05E8}\u{05E7} \u{05D8}\u{05DD}\u{05D5}")
+check("PC: back to how are you",
+      "\u{05D9}\u{05DD}' \u{05E9}\u{05E8}\u{05E7} \u{05D8}\u{05DD}\u{05D5}", "how are you")
+check("PC: tav and comma back", "\u{05E9},\u{05EA}", "a',")  // ש,ת -> a',
+check("PC: smart-quoted w back", "\u{05D9}\u{05DD}\u{2018}", "how")
+check("PC: smart-quoted ' key -> comma", "a\u{2019}b", "\u{05E9},\u{05E0}")
+check("PC: backtick -> backslash", "`", "\\")
+check("PC: & unchanged", "&", "&")
+check("PC: \" unchanged", "\"", "\"")
+KeyboardConverter.layout = .apple
+
+print("\n== Smart (word-by-word) conversion ==")
+// A tiny fake dictionary stands in for the system spell checker.
+let dict: Set<String> = ["bang", "want", "to", "אם", "today", "שלום", "מה", "נשמע", "hello", "how", "are", "you", "ים", "I", "love", "אני", "שבת", "the", "price", "בלחם"]
+func smart(_ name: String, _ input: String, _ expected: String) {
+    let got = KeyboardConverter.smartConvert(input) { w, _ in dict.contains(w) }
+    if got == expected {
+        passes += 1
+        print("  ok   \(name): \(input.debugDescription) -> \(got.debugDescription)")
+    } else {
+        failures += 1
+        print("  FAIL \(name): \(input.debugDescription) expected \(expected.debugDescription) got \(got.debugDescription)")
+    }
+}
+smart("mixed: hebrew + wrong english", "שלום nv bang", "שלום מה נשמע")
+smart("mixed: english + wrong hebrew", "hello שרק you", "hello are you")
+smart("mixed keeps spacing", "I  love\tשבת  טםו", "I  love\tשבת  you")
+smart("unknown follows majority (tie converts)", "שלום nv xyzq", "שלום מה סטז/")
+smart("only real words -> convert all", "I love", "ן ךםהק")
+smart("trailing punctuation", "אני love akuo.", "אני love שלוםץ")
+smart("single valid word still converts", "hello", "יקךךם")
+smart("real-both word trailing after converted", "שלום nv bang", "שלום מה נשמע")
+smart("real-both word before a kept word stays", "I want to ckjo today", "I want to בלחם today")
+smart("numbers stay as typed", "the price 50, akuo", "the price 50, שלום")
+smart("all wrong layout", "nv bang", "מה נשמע")
+
 print("\n----")
 print("Passed: \(passes)   Failed: \(failures)")
 exit(failures == 0 ? 0 : 1)
