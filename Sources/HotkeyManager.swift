@@ -1,7 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Registers a global ⌘M hotkey via the Carbon Hot Key API.
+/// Registers a global ⌘. hotkey via the Carbon Hot Key API.
 /// (CGEvent taps are available too, but RegisterEventHotKey is the
 /// least invasive approach — no event-tap permission needed, and it
 /// piggy-backs on the Accessibility grant we already require.)
@@ -29,7 +29,7 @@ final class HotkeyManager {
 
         let id = EventHotKeyID(signature: OSType(0x4B464958 /* 'KFIX' */),
                                id: 1)
-        RegisterEventHotKey(UInt32(kVK_ANSI_M),
+        RegisterEventHotKey(UInt32(kVK_ANSI_Period),
                             UInt32(cmdKey),
                             id,
                             GetApplicationEventTarget(),

@@ -27,14 +27,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             button.title = "א/A"
-            button.toolTip = "KeyboardFixer (⌘M)"
+            button.toolTip = "KeyboardFixer (⌘.)"
         }
 
         let menu = NSMenu()
 
         let convertItem = NSMenuItem(title: "Convert selected text",
                                      action: #selector(convertAction),
-                                     keyEquivalent: "m")
+                                     keyEquivalent: ".")
         convertItem.keyEquivalentModifierMask = [.command]
         convertItem.target = self
         menu.addItem(convertItem)

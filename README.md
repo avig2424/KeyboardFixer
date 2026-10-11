@@ -4,14 +4,14 @@ A tiny native macOS menu-bar app that fixes text typed in the wrong keyboard
 language — converts between **Hebrew** and **English** using the standard
 Israeli QWERTY layout.
 
-Hit **⌘M** anywhere, and the text in the focused field is rewritten in the
+Hit **⌘.** anywhere, and the text in the focused field is rewritten in the
 other layout. The clipboard you had before is restored automatically.
 
 ---
 
 ## Behavior
 
-When you press **⌘M** (or pick *Convert selected text* from the menu):
+When you press **⌘.** (or pick *Convert selected text* from the menu):
 
 1. If you already have a selection, it's used as-is.
    Otherwise the app sends **⌘A** to select the whole field.
@@ -65,7 +65,7 @@ You can re-trigger the prompt at any time by picking
 
 ## Menu
 
-- **Convert selected text** — same as pressing ⌘M.
+- **Convert selected text** — same as pressing ⌘..
 - **Launch at login** — toggles the `SMAppService` login item (macOS 13+).
 - **Quit KeyboardFixer**.
 
@@ -105,7 +105,7 @@ Notes:
 Sources/
   main.swift              # NSApplication entry point
   AppDelegate.swift       # Status item, menu, launch-at-login
-  HotkeyManager.swift     # ⌘M global hotkey via RegisterEventHotKey
+  HotkeyManager.swift     # ⌘. global hotkey via RegisterEventHotKey
   TextFixer.swift         # Copy → convert → paste → restore clipboard
   KeyboardConverter.swift # Hebrew ↔ English mapping
 Info.plist                # LSUIElement + NSAccessibilityUsageDescription
