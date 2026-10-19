@@ -23,6 +23,14 @@ enum TextFixer {
         }
         guard let pair = InputSources.currentPair() else { return }
 
+        // Text in one of our own windows (the setup window's "Try it" field):
+        // edit it directly. The ⌘C/⌘V route can't work here — this thread
+        // would wait for a copy that only this same thread can perform.
+        if NSApp.isActive, let textView = NSApp.keyWindow?.firstResponder as? NSTextView {
+            convertInPlace(textView, pair)
+            return
+        }
+
         // 1. Snapshot the clipboard so we can restore it later.
         let savedItems = snapshotPasteboard()
 
@@ -46,9 +54,7 @@ enum TextFixer {
         }
 
         // 4. Convert, using the layouts the user actually has enabled.
-        let converted = Settings.smartMode
-            ? pair.smartConvert(copied) { isWord($0, $1, pair) }
-            : pair.convert(copied)
+        let converted = convert(copied, pair)
         guard converted != copied else {
             restorePasteboard(savedItems)
             return
@@ -66,11 +72,36 @@ enum TextFixer {
         usleep(80_000)
         restorePasteboard(savedItems)
 
-        // 7. Keep typing in the language the text now ends in (with mixed
-        //    text, the last word is where the cursor is).
+        switchKeyboard(for: converted, pair)
+    }
+
+    private static func convert(_ text: String, _ pair: LayoutPair) -> String {
+        Settings.smartMode
+            ? pair.smartConvert(text) { isWord($0, $1, pair) }
+            : pair.convert(text)
+    }
+
+    /// Keep typing in the language the text now ends in (with mixed text,
+    /// the last word is where the cursor is).
+    private static func switchKeyboard(for converted: String, _ pair: LayoutPair) {
         if Settings.switchKeyboard, let lastLetter = converted.last(where: { $0.isLetter }) {
             InputSources.select(other: pair.containsOther(String(lastLetter)))
         }
+    }
+
+    /// Convert the selection (or all text) of a text view in our own app.
+    private static func convertInPlace(_ textView: NSTextView, _ pair: LayoutPair) {
+        var range = textView.selectedRange()
+        if range.length == 0 { range = NSRange(location: 0, length: (textView.string as NSString).length) }
+        let original = (textView.string as NSString).substring(with: range)
+        let converted = convert(original, pair)
+        guard converted != original,
+              textView.shouldChangeText(in: range, replacementString: converted) else { return }
+        textView.replaceCharacters(in: range, with: converted)
+        textView.didChangeText()
+        textView.setSelectedRange(NSRange(location: range.location,
+                                          length: (converted as NSString).length))
+        switchKeyboard(for: converted, pair)
     }
 
     /// Select something to convert when the user had no selection, and copy
