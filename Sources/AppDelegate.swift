@@ -1,69 +1,92 @@
 import AppKit
-import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
+    private var convertItem: NSMenuItem!
     private var hotkey: HotkeyManager!
+    private lazy var settingsWindow: SettingsWindowController = {
+        let controller = SettingsWindowController()
+        controller.onShortcutChange = { [weak self] shortcut in self?.apply(shortcut) }
+        controller.onRecordingChange = { [weak self] recording in
+            // Pause the global shortcut so pressing it records instead of converting.
+            if recording { self?.hotkey.unregister() } else { self?.apply(Settings.shortcut) }
+        }
+        return controller
+    }()
+    private lazy var setupWindow = SetupWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)  // no Dock icon
-        UserDefaults.standard.register(defaults: [TextFixer.switchKeyboardKey: true])
+        Settings.registerDefaults()
+        NSApp.mainMenu = buildMainMenu()
 
         buildStatusItem()
 
         hotkey = HotkeyManager { [weak self] in
             self?.runConversion()
         }
-        hotkey.register()
+        apply(Settings.shortcut)
 
-        // Prompt up front if Accessibility isn't granted yet.
-        _ = TextFixer.ensureAccessibility(prompt: true)
+        TextFixer.onMissingPermission = { [weak self] in self?.showSetup() }
+        if !Settings.hasCompletedSetup || !AXIsProcessTrusted() {
+            showSetup()
+        }
     }
 
-    // MARK: - Menu
+    private func apply(_ shortcut: Shortcut) {
+        if !hotkey.register(shortcut) {
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t use \(shortcut.displayString) as the shortcut."
+            alert.informativeText = "Another app may be using it. Pick a different one in Settings."
+            alert.runModal()
+        }
+        statusItem.button?.toolTip = "KeyboardFixer (\(shortcut.displayString))"
+        convertItem.keyEquivalent = shortcut.keyEquivalent ?? ""
+        convertItem.keyEquivalentModifierMask = shortcut.modifierFlags
+    }
+
+    // MARK: - Menus
 
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.title = "א/A"
-            button.toolTip = "KeyboardFixer (⌘.)"
-        }
+        statusItem.button?.title = "א/A"
 
         let menu = NSMenu()
-
-        let convertItem = NSMenuItem(title: "Convert selected text",
-                                     action: #selector(convertAction),
-                                     keyEquivalent: ".")
-        convertItem.keyEquivalentModifierMask = [.command]
-        convertItem.target = self
+        convertItem = item("Convert selected text", #selector(convertAction))
         menu.addItem(convertItem)
-
         menu.addItem(.separator())
-
-        let switchItem = NSMenuItem(title: "Switch keyboard after converting",
-                                    action: #selector(toggleSwitchKeyboard),
-                                    keyEquivalent: "")
-        switchItem.target = self
-        switchItem.state = UserDefaults.standard.bool(forKey: TextFixer.switchKeyboardKey) ? .on : .off
-        menu.addItem(switchItem)
-
-        let launchItem = NSMenuItem(title: "Launch at login",
-                                    action: #selector(toggleLaunchAtLogin),
-                                    keyEquivalent: "")
-        launchItem.target = self
-        launchItem.state = launchAtLoginEnabled ? .on : .off
-        menu.addItem(launchItem)
-
+        menu.addItem(item("Settings…", #selector(showSettings), key: ","))
+        menu.addItem(item("Setup Guide…", #selector(showSetupAction)))
+        menu.addItem(item("About KeyboardFixer", #selector(showAbout)))
         menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(title: "Quit KeyboardFixer",
-                                  action: #selector(quitAction),
-                                  keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-
+        menu.addItem(item("Quit KeyboardFixer", #selector(quitAction), key: "q"))
         statusItem.menu = menu
+    }
+
+    private func item(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = self
+        return item
+    }
+
+    /// Menu-bar-only apps have no visible main menu, but text fields in our
+    /// windows still need its Edit shortcuts (⌘C, ⌘V, ⌘A…) to work.
+    private func buildMainMenu() -> NSMenu {
+        let main = NSMenu()
+        let editItem = NSMenuItem()
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        editItem.submenu = edit
+        main.addItem(editItem)
+        return main
     }
 
     // MARK: - Actions
@@ -76,44 +99,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         runConversion()
     }
 
-    @objc private func toggleSwitchKeyboard(_ sender: NSMenuItem) {
-        let enabled = sender.state != .on
-        UserDefaults.standard.set(enabled, forKey: TextFixer.switchKeyboardKey)
-        sender.state = enabled ? .on : .off
+    @objc private func showSettings() {
+        settingsWindow.present()
+    }
+
+    @objc private func showSetupAction() {
+        showSetup()
+    }
+
+    private func showSetup() {
+        setupWindow.present()
+    }
+
+    @objc private func showAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        let credits = NSAttributedString(
+            string: "Fixes text typed in the wrong keyboard language.\nRuns entirely on your Mac — no network access.",
+            attributes: [.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                         .foregroundColor: NSColor.secondaryLabelColor])
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }
 
     @objc private func quitAction() {
         NSApp.terminate(nil)
-    }
-
-    // MARK: - Launch at login
-
-    private var launchAtLoginEnabled: Bool {
-        if #available(macOS 13.0, *) {
-            return SMAppService.mainApp.status == .enabled
-        }
-        return false
-    }
-
-    @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
-        guard #available(macOS 13.0, *) else {
-            let alert = NSAlert()
-            alert.messageText = "Launch at login requires macOS 13 or later."
-            alert.runModal()
-            return
-        }
-        let service = SMAppService.mainApp
-        do {
-            if service.status == .enabled {
-                try service.unregister()
-                sender.state = .off
-            } else {
-                try service.register()
-                sender.state = .on
-            }
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.runModal()
-        }
     }
 }

@@ -1,124 +1,94 @@
 # KeyboardFixer
 
 A tiny native macOS menu-bar app that fixes text typed in the wrong keyboard
-language — converts between **Hebrew** and **English** using the standard
-Israeli QWERTY layout.
+language. Typed `akuo` when you meant `שלום`? Select it, press **⌘.**, and it
+becomes `שלום`.
 
-Hit **⌘.** anywhere, and the text in the focused field is rewritten in the
-other layout. The clipboard you had before is restored automatically.
+Works with Hebrew out of the box, and with any other layout that can't type
+English: Russian, Arabic, Greek…
 
----
+## Install
 
-## Behavior
+1. Download **`KeyboardFixer-<version>.dmg`** from the
+   [Releases page](https://github.com/avig2424/KeyboardFixer/releases).
+2. Open it and drag **KeyboardFixer** into **Applications**.
+3. Open KeyboardFixer from Applications. The first time, macOS blocks it
+   because it isn't from an identified developer:
+   - Go to **System Settings → Privacy & Security**, scroll down, and click
+     **Open Anyway** next to the KeyboardFixer message. Or, in Terminal:
+     `xattr -dr com.apple.quarantine /Applications/KeyboardFixer.app`
+4. The setup window walks you through turning on **Accessibility** access
+   and lets you try the shortcut.
 
-When you press **⌘.** (or pick *Convert selected text* from the menu):
+Requires macOS 12 or later, on an Apple Silicon Mac (M1 or newer).
 
-1. If you already have a selection, it's used as-is.
-   Otherwise the app sends **⌘A** to select the whole field.
-2. The selection is copied via **⌘C**.
-3. The text is converted word by word. Using the macOS spell checker (English
-   and Hebrew), each word is kept if it's already a real word, or converted if
-   its conversion is — so `שלום nv bang` becomes `שלום מה נשמע`. When nothing
-   is clearly mixed (e.g. a single word), everything is converted.
-   The mapping follows the Hebrew layout you have enabled (**Hebrew** or
-   **Hebrew-PC** — they differ on the W key: `׳` vs `'`).
-4. The result is pasted via **⌘V**.
-5. The clipboard is restored to whatever it held before, so the converted
-   text never lingers there.
-6. The active keyboard switches to the language the text now ends in, so you
-   can keep typing (toggle *Switch keyboard after converting* in the menu).
+## Privacy
 
-## Requirements
+- **Nothing leaves your Mac.** The app has no network code at all.
+- Nothing is stored except your settings.
+- **Accessibility** access is used only to copy the selected text and paste
+  the fixed version. Your clipboard is restored right afterwards.
+- **Password fields are never touched.**
 
-- macOS **12.0 or later** (Launch-at-login requires macOS 13+)
-- Xcode command-line tools (`xcode-select --install`) — only `swiftc` is used,
-  no Xcode project required.
+## How it works
 
-## Build
+When you press the shortcut (or pick *Convert selected text* from the menu):
+
+1. The selected text is copied. If nothing is selected, it selects the whole
+   field or the current line (your choice in Settings).
+2. The text is converted by physical key position, between your English
+   layout and your second-language layout. Both mappings are read from the
+   keyboard layouts on your Mac, so they match exactly what you type, including
+   punctuation (e.g. the W key types `'` on Hebrew – PC and `׳` on Hebrew).
+3. Mixed text is fixed word by word using the macOS spell checker. Only the
+   words typed in the wrong layout change, so `שלום nv bang` becomes
+   `שלום מה נשמע`. If nothing is clearly mixed (e.g. a single word),
+   everything is converted.
+4. The result is pasted, and your clipboard is restored.
+5. The keyboard switches to the language you were typing in, so you can keep
+   going.
+
+## Settings
+
+Open **Settings…** from the **א/A** menu-bar icon:
+
+- **Shortcut**: click and press a new combination (it must include ⌘, ⌥ or ⌃).
+- **Second language**: Automatic, or pick one of your enabled layouts.
+- **When nothing is selected**: convert the whole field, or only the current
+  line. The current-line option uses ⌘⇧←/→ and may not work in every app.
+- **Fix mixed text word by word**, **Switch keyboard after converting**,
+  **Launch at login** (macOS 13+).
+
+## Build from source
+
+Needs the Xcode command-line tools (`xcode-select --install`). There's no
+Xcode project and no dependencies.
 
 ```bash
-./build.sh
-open build/KeyboardFixer.app
+./build.sh        # → build/KeyboardFixer.app
+./test.sh         # converter tests, using the real macOS layouts
+./release.sh      # → build/KeyboardFixer-<version>.dmg
 ```
 
-The script compiles `Sources/*.swift` straight into an `.app` bundle at
-`build/KeyboardFixer.app`. No external dependencies.
+`swift tools/make_icon.swift` regenerates `Resources/AppIcon.icns`.
 
-> If you're on an Intel Mac, edit `build.sh` and change
-> `-target arm64-apple-macos12` to `-target x86_64-apple-macos12`
-> (or drop the `-target` flag entirely to build for the host arch).
+Each rebuild changes the app's signature, so macOS may need Accessibility
+turned off and on again for KeyboardFixer.
 
-## Grant Accessibility permission
-
-The app needs Accessibility access to read the focused text field and to
-synthesize ⌘A / ⌘C / ⌘V keystrokes.
-
-1. Launch `KeyboardFixer.app` once. You'll see a prompt — click
-   **Open System Settings**.
-2. Go to **System Settings → Privacy & Security → Accessibility**.
-3. Toggle **KeyboardFixer** on. (If it's not listed yet, click **+** and
-   pick `build/KeyboardFixer.app`.)
-4. Quit and relaunch the app so the new permission takes effect.
-
-You can re-trigger the prompt at any time by picking
-*Convert selected text* from the menu when permission is missing.
-
-## Menu
-
-- **Convert selected text** — same as pressing ⌘..
-- **Launch at login** — toggles the `SMAppService` login item (macOS 13+).
-- **Quit KeyboardFixer**.
-
-## Layout mapping
-
-Every physical key is mapped to whatever the *other* layout produces at that
-same position — not just the letters. The table is generated from the actual
-macOS layouts (`tools/dump_layout.swift` via `UCKeyTranslate`), so it matches
-exactly what you type.
-
-Letters and base punctuation (Apple "Hebrew" layout over US QWERTY):
-
-```
-q→/  w→׳  e→ק  r→ר  t→א  y→ט  u→ו  i→ן  o→ם  p→פ  [→]  ]→[
-a→ש  s→ד  d→ג  f→כ  g→ע  h→י  j→ח  k→ל  l→ך  ;→ף  '→,
-z→ז  x→ס  c→ב  v→ה  b→נ  n→מ  m→צ  ,→ת  .→ץ  /→.  `→;  \→ֿ
-```
-
-Shifted keys that differ between the layouts:
-
-```
-(→)   )→(   {→}   }→{   <→>   >→<   &→₪ (shekel)   "→״ (gershayim)
-```
-
-Notes:
-- The reverse (Hebrew → English) mapping is generated automatically, plus
-  fix-ups for the geresh (U+05F3), gershayim (U+05F4), and the curly quotes
-  some apps auto-substitute.
-- Shift+letter on the Hebrew layout produces pointed (niqqud) forms such as
-  `שׁ`/`לֹ`; these are intentionally **not** mapped — a capital letter typed by
-  mistake is converted as its plain Hebrew letter.
-- Digits, spaces, and any key identical in both layouts pass through unchanged.
-
-## File layout
+## Files
 
 ```
 Sources/
   main.swift              # NSApplication entry point
-  AppDelegate.swift       # Status item, menu, launch-at-login
-  HotkeyManager.swift     # ⌘. global hotkey via RegisterEventHotKey
+  AppDelegate.swift       # Menu-bar icon, menus, windows
+  HotkeyManager.swift     # Global shortcut via RegisterEventHotKey
   TextFixer.swift         # Copy → convert → paste → restore clipboard
-  KeyboardConverter.swift # Hebrew ↔ English mapping
-Info.plist                # LSUIElement + NSAccessibilityUsageDescription
-build.sh                  # swiftc → .app bundle
-tools/
-  dump_layout.swift       # one-off: regenerate the mapping from macOS layouts
+  KeyboardConverter.swift # Conversion tables and word-by-word conversion
+  InputSources.swift      # Reads and switches the Mac's keyboard layouts
+  Settings.swift          # Preferences and the Shortcut type
+  SettingsWindow.swift    # Settings window
+  SetupWindow.swift       # First-run setup window
+  ShortcutRecorder.swift  # "Click and press a shortcut" control
+Tests/main.swift          # Converter tests
+tools/make_icon.swift     # Draws the app icon
 ```
-
-## Notes
-
-- The hotkey is registered through Carbon's `RegisterEventHotKey`, which is
-  the simplest API for a global shortcut and avoids needing a CGEvent tap
-  (which would require Input Monitoring on top of Accessibility).
-- ⌘C/⌘V are posted via `CGEvent` with `.maskCommand`.
-- Clipboard restore preserves every type on every item — text, RTF, images,
-  files, etc.

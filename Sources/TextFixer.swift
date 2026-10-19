@@ -6,14 +6,22 @@ enum TextFixer {
 
     private static let pasteboard = NSPasteboard.general
 
-    /// UserDefaults key: switch the active keyboard to the converted
-    /// language after pasting.
-    static let switchKeyboardKey = "switchKeyboardAfterConvert"
+    /// Called when Accessibility permission is missing (shows the setup window).
+    static var onMissingPermission: (() -> Void)?
 
-    /// Run the conversion against the current selection, or the whole field
-    /// if nothing is selected.
+    /// Run the conversion against the current selection, or — if nothing is
+    /// selected — the whole field or the current line (see Settings).
     static func fixSelectedText() {
-        guard ensureAccessibility() else { return }
+        guard AXIsProcessTrusted() else {
+            onMissingPermission?()
+            return
+        }
+        // Never touch password fields: don't copy, convert, or paste secrets.
+        guard !focusedElementIsSecure() else {
+            NSSound.beep()
+            return
+        }
+        guard let pair = InputSources.currentPair() else { return }
 
         // 1. Snapshot the clipboard so we can restore it later.
         let savedItems = snapshotPasteboard()
@@ -25,10 +33,8 @@ enum TextFixer {
         //    "selected text" attribute is missing and an AX probe would wrongly
         //    report "no selection" and select the entire document.
         if !copySelection(timeout: 0.5) {
-            // 3. Nothing was selected — select the whole field, then copy that.
-            postCmdKey(.a)
-            usleep(40_000)
-            guard copySelection(timeout: 0.5) else {
+            // 3. Nothing was selected — select the field or line, then copy that.
+            guard selectWhenNothingSelected() else {
                 restorePasteboard(savedItems)
                 return
             }
@@ -39,9 +45,10 @@ enum TextFixer {
             return
         }
 
-        // 4. Convert, using the Hebrew layout the user actually has enabled.
-        KeyboardConverter.layout = InputSources.hebrewLayout()
-        let converted = KeyboardConverter.smartConvert(copied, isWord: isWord)
+        // 4. Convert, using the layouts the user actually has enabled.
+        let converted = Settings.smartMode
+            ? pair.smartConvert(copied) { isWord($0, $1, pair) }
+            : pair.convert(copied)
         guard converted != copied else {
             restorePasteboard(savedItems)
             return
@@ -51,7 +58,7 @@ enum TextFixer {
         pasteboard.clearContents()
         pasteboard.setString(converted, forType: .string)
         let prePasteCount = pasteboard.changeCount
-        postCmdKey(.v)
+        postKey(kVK_ANSI_V, .maskCommand)
 
         // 6. Wait for the paste to consume the clipboard, then restore the original.
         _ = waitForPasteboardChange(from: prePasteCount, timeout: 0.4)
@@ -61,21 +68,59 @@ enum TextFixer {
 
         // 7. Keep typing in the language the text now ends in (with mixed
         //    text, the last word is where the cursor is).
-        if UserDefaults.standard.bool(forKey: switchKeyboardKey),
-           let lastLetter = converted.last(where: { $0.isLetter }) {
-            InputSources.select(hebrew: KeyboardConverter.containsHebrew(String(lastLetter)))
+        if Settings.switchKeyboard, let lastLetter = converted.last(where: { $0.isLetter }) {
+            InputSources.select(other: pair.containsOther(String(lastLetter)))
+        }
+    }
+
+    /// Select something to convert when the user had no selection, and copy
+    /// it. Returns false if nothing could be copied.
+    private static func selectWhenNothingSelected() -> Bool {
+        switch Settings.noSelection {
+        case .wholeField:
+            postKey(kVK_ANSI_A, .maskCommand)
+            usleep(40_000)
+            return copySelection(timeout: 0.5)
+        case .currentLine:
+            // ⌘⇧← selects to the line's left edge: the start of an English
+            // line. In a right-to-left (Hebrew) line that edge is the end, so
+            // with the cursor at the end nothing gets selected — then ⌘⇧→.
+            postKey(kVK_LeftArrow, [.maskCommand, .maskShift])
+            usleep(40_000)
+            if copySelection(timeout: 0.3) { return true }
+            postKey(kVK_RightArrow, [.maskCommand, .maskShift])
+            usleep(40_000)
+            return copySelection(timeout: 0.3)
         }
     }
 
     /// Dictionary lookup for smart conversion, via the system spell checker.
-    private static func isWord(_ word: String, _ language: KeyboardConverter.Language) -> Bool {
+    private static func isWord(_ word: String, _ language: LayoutPair.Language,
+                               _ pair: LayoutPair) -> Bool {
+        let code = language == .other ? pair.otherLanguage : "en"
+        // Single Hebrew letters (ו, ה, ש...) are prefixes, not words, but the
+        // spell checker accepts them.
+        if code == "he" && word.count < 2 { return false }
         let checker = NSSpellChecker.shared
-        let code = language == .hebrew ? "he" : "en"
         guard checker.availableLanguages.contains(code) else { return false }
         let miss = checker.checkSpelling(of: word, startingAt: 0, language: code,
                                          wrap: false, inSpellDocumentWithTag: 0,
                                          wordCount: nil)
         return miss.location == NSNotFound
+    }
+
+    /// True if the focused text field is a password field.
+    private static func focusedElementIsSecure() -> Bool {
+        let system = AXUIElementCreateSystemWide()
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString,
+                                            &focused) == .success,
+              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else {
+            return false
+        }
+        var subrole: CFTypeRef?
+        AXUIElementCopyAttributeValue(element as! AXUIElement, kAXSubroleAttribute as CFString, &subrole)
+        return (subrole as? String) == (kAXSecureTextFieldSubrole as String)
     }
 
     // MARK: - Selection copy
@@ -85,7 +130,7 @@ enum TextFixer {
     private static func copySelection(timeout: TimeInterval) -> Bool {
         pasteboard.clearContents()
         let before = pasteboard.changeCount
-        postCmdKey(.c)
+        postKey(kVK_ANSI_C, .maskCommand)
         guard waitForPasteboardChange(from: before, timeout: timeout) else { return false }
         guard let s = pasteboard.string(forType: .string), !s.isEmpty else { return false }
         return true
@@ -93,33 +138,18 @@ enum TextFixer {
 
     // MARK: - Accessibility
 
+    /// Ask macOS to show its own permission prompt (adds the app to the list
+    /// in System Settings). Returns whether permission is already granted.
     @discardableResult
-    static func ensureAccessibility(prompt: Bool = false) -> Bool {
+    static func requestAccessibility() -> Bool {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let opts: CFDictionary = [key: prompt] as CFDictionary
-        let trusted = AXIsProcessTrustedWithOptions(opts)
-        if !trusted {
-            DispatchQueue.main.async { showAccessibilityAlert() }
-        }
-        return trusted
+        return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
-    private static func showAccessibilityAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Accessibility permission required"
-        alert.informativeText = """
-            KeyboardFixer needs Accessibility access to read selected text and \
-            send keystrokes. Open System Settings → Privacy & Security → \
-            Accessibility, then enable KeyboardFixer.
-            """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open System Settings")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn {
-            if let url = URL(string:
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                NSWorkspace.shared.open(url)
-            }
+    static func openAccessibilitySettings() {
+        if let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -169,23 +199,12 @@ enum TextFixer {
 
     // MARK: - Keystroke synthesis
 
-    private enum CmdKey {
-        case a, c, v
-        var code: CGKeyCode {
-            switch self {
-            case .a: return CGKeyCode(kVK_ANSI_A)
-            case .c: return CGKeyCode(kVK_ANSI_C)
-            case .v: return CGKeyCode(kVK_ANSI_V)
-            }
-        }
-    }
-
-    private static func postCmdKey(_ key: CmdKey) {
+    private static func postKey(_ code: Int, _ flags: CGEventFlags) {
         let src = CGEventSource(stateID: .combinedSessionState)
-        let down = CGEvent(keyboardEventSource: src, virtualKey: key.code, keyDown: true)
-        let up   = CGEvent(keyboardEventSource: src, virtualKey: key.code, keyDown: false)
-        down?.flags = .maskCommand
-        up?.flags = .maskCommand
+        let down = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(code), keyDown: true)
+        let up   = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(code), keyDown: false)
+        down?.flags = flags
+        up?.flags = flags
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
     }

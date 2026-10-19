@@ -13,9 +13,10 @@ CONTENTS="$APP_DIR/Contents"
 MACOS="$CONTENTS/MacOS"
 
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS"
+mkdir -p "$MACOS" "$CONTENTS/Resources"
 
 cp Info.plist "$CONTENTS/Info.plist"
+cp Resources/AppIcon.icns "$CONTENTS/Resources/AppIcon.icns"
 
 # Compile all Swift sources into a single binary.
 swiftc \

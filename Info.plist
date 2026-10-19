@@ -9,9 +9,13 @@
     <key>CFBundleIdentifier</key>
     <string>com.keyboardfixer.app</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>2.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Free to use and share.</string>
     <key>CFBundleExecutable</key>
     <string>KeyboardFixer</string>
     <key>CFBundlePackageType</key>
@@ -27,6 +31,6 @@
     <key>NSAccessibilityUsageDescription</key>
     <string>KeyboardFixer needs Accessibility access to read the currently selected text and to send copy/paste keystrokes when you press the convert hotkey.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>KeyboardFixer sends keyboard events to convert text between Hebrew and English layouts.</string>
+    <string>KeyboardFixer sends keyboard events to convert text typed in the wrong keyboard layout.</string>
 </dict>
 </plist>

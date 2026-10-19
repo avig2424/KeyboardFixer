@@ -1,92 +1,104 @@
 import Foundation
 
-/// Hebrew <-> US QWERTY conversion by physical key position. The tables below
-/// were generated from the actual macOS layouts via `UCKeyTranslate` (see
-/// tools/dump_layout.swift) so every key — letters, punctuation, brackets, and
-/// shifted symbols — matches what you really type.
-enum KeyboardConverter {
+/// Converts text typed in the wrong keyboard layout, by physical key position,
+/// between an English layout and one other layout (Hebrew, Russian, Arabic…).
+///
+/// The tables are not hand-written: `LayoutPair.init(keys:otherLanguage:)`
+/// builds them from what each physical key types on the two layouts, which the
+/// app reads from the user's own enabled keyboards (see `InputSources`).
+struct LayoutPair {
 
-    /// The macOS Hebrew layouts we know how to map. They share the letters
-    /// but differ on a few punctuation keys (most notably W).
-    enum HebrewLayout {
-        case apple   // com.apple.keylayout.Hebrew
-        case pc      // com.apple.keylayout.Hebrew-PC
+    /// What one physical key types on each layout.
+    struct Key {
+        let english: String
+        let other: String
+        let shifted: Bool
     }
 
-    /// Which Hebrew layout the user types with. Set before each conversion
-    /// from the enabled input sources (see `InputSources`).
-    static var layout: HebrewLayout = .apple
+    /// English character -> what the same key types on the other layout.
+    private(set) var toOther: [Character: Character] = [:]
+    /// Other-layout character -> what the same key types in English.
+    private(set) var toEnglish: [Character: Character] = [:]
+    /// Unicode scalars of letters only the other layout types; their presence
+    /// marks text as typed in the other layout.
+    private(set) var otherScalars: Set<UInt32> = []
+    /// Spell-check language code of the other layout ("he", "ru"…).
+    let otherLanguage: String
 
-    /// Keys that produce the same thing on both Hebrew layouts. Keyed by the
-    /// *exact* US character, so shifted symbols (e.g. "(") map correctly.
-    /// Uppercase letters are handled by case-folding in `convert(_:)`.
-    private static let common: [Character: Character] = [
-        // Top letter row (w differs per layout)
-        "q": "/", "e": "ק", "r": "ר", "t": "א",
-        "y": "ט", "u": "ו", "i": "ן", "o": "ם", "p": "פ",
-        // Home row
-        "a": "ש", "s": "ד", "d": "ג", "f": "כ", "g": "ע",
-        "h": "י", "j": "ח", "k": "ל", "l": "ך", ";": "ף",
-        "'": ",",
-        // Bottom row
-        "z": "ז", "x": "ס", "c": "ב", "v": "ה", "b": "נ",
-        "n": "מ", "m": "צ", ",": "ת", ".": "ץ", "/": ".",
-        // Brackets (swapped on Hebrew layouts)
-        "[": "]", "]": "[",
-        "(": ")", ")": "(", "{": "}", "}": "{",
-        "<": ">", ">": "<",
-    ]
+    init(keys: [Key], otherLanguage: String) {
+        self.otherLanguage = otherLanguage
 
-    /// Apple "Hebrew": W gives a geresh, plus a few extra symbols.
-    private static let appleExtras: [Character: Character] = [
-        "w": "\u{05F3}",   // ׳ HEBREW PUNCTUATION GERESH
-        "\\": "\u{05BF}",  // ֿ HEBREW POINT RAFE
-        "`": ";",
-        "&": "\u{20AA}",   // ₪ NEW SHEQEL SIGN
-        "\"": "\u{05F4}",  // ״ HEBREW PUNCTUATION GERSHAYIM
-    ]
+        let unshiftedOther = Dictionary(
+            keys.filter { !$0.shifted }.map { ($0.english.lowercased(), $0.other) },
+            uniquingKeysWith: { first, _ in first })
 
-    /// "Hebrew-PC": W gives a plain apostrophe; the ` and § keys differ.
-    private static let pcExtras: [Character: Character] = [
-        "w": "'",
-        "`": "\\", "~": "|",
-        "§": ";", "±": "~",
-    ]
+        // Unshifted keys first, so plain letters win when a character is
+        // typed by more than one key (e.g. ש by both a and Shift-a).
+        for key in keys.sorted(by: { !$0.shifted && $1.shifted }) {
+            guard key.english != key.other,
+                  key.english.count == 1, key.other.count == 1 else { continue }
+            let e = Character(key.english)
+            var o = Character(key.other)
 
-    private static let appleEnToHe = common.merging(appleExtras) { $1 }
-    private static let pcEnToHe    = common.merging(pcExtras) { $1 }
-    private static let appleHeToEn = reversed(appleEnToHe)
-    private static let pcHeToEn    = reversed(pcEnToHe)
+            // Shifted letters: Russian types the capital (Ф), which we keep;
+            // Hebrew types the same letter or a pointed/odd form (שׁ, „), which
+            // we treat as the plain letter.
+            if key.shifted, e.isLetter, let plain = unshiftedOther[key.english.lowercased()],
+               plain.count == 1, key.other != plain, key.other.lowercased() != plain {
+                if toEnglish[o] == nil { toEnglish[o] = Character(key.english.lowercased()) }
+                o = Character(plain)
+            }
 
-    private static func reversed(_ table: [Character: Character]) -> [Character: Character] {
-        var m: [Character: Character] = [:]
-        for (k, v) in table { m[v] = k }
-        // The W key's output varies by layout and app: a geresh (Apple
-        // layout), a plain ' (PC layout), or a curly ‘ ’ when the app applies
-        // smart quotes. Map them all back to w; likewise ״ / curly quotes to ".
-        // None of these can come from another key, so this is safe for both.
-        m["\u{05F3}"] = "w"   // ׳ HEBREW PUNCTUATION GERESH
-        m["'"]        = "w"
-        m["\u{2018}"] = "w"   // ‘ LEFT SINGLE QUOTATION MARK
-        m["\u{2019}"] = "w"   // ’ RIGHT SINGLE QUOTATION MARK
-        m["\u{05F4}"] = "\""  // ״ HEBREW PUNCTUATION GERSHAYIM
-        m["\u{201C}"] = "\""  // “ LEFT DOUBLE QUOTATION MARK
-        m["\u{201D}"] = "\""  // ” RIGHT DOUBLE QUOTATION MARK
-        m["\u{20AA}"] = "&"   // ₪ — typed via Shift-7 on the Apple layout
-        return m
+            if toOther[e] == nil { toOther[e] = o }
+            if toEnglish[o] == nil { toEnglish[o] = e }
+            if !o.isASCII, o.isLetter || o.unicodeScalars.contains(where: { $0.properties.isAlphabetic }) {
+                otherScalars.formUnion(o.unicodeScalars.map(\.value))
+            }
+        }
+
+        // Apps with smart quotes turn ' and " into curly quotes. Map those to
+        // the same keys. Hebrew's W key types a geresh (׳) or a plain '
+        // depending on the layout; accept both.
+        for (curly, straight) in [("\u{2018}", "'"), ("\u{2019}", "'"),
+                                  ("\u{201C}", "\""), ("\u{201D}", "\"")] {
+            let c = Character(curly), s = Character(straight)
+            if toOther[c] == nil, let o = toOther[s] { toOther[c] = o }
+        }
+        for group in [["'", "\u{05F3}", "\u{2018}", "\u{2019}"],
+                      ["\"", "\u{05F4}", "\u{201C}", "\u{201D}"]] {
+            let chars = group.map { Character($0) }
+            guard let english = chars.compactMap({ toEnglish[$0] }).first else { continue }
+            for c in chars where toEnglish[c] == nil { toEnglish[c] = english }
+        }
     }
 
-    /// US character -> the character the same physical key produces on the
-    /// current Hebrew layout.
-    static var englishToHebrew: [Character: Character] {
-        layout == .pc ? pcEnToHe : appleEnToHe
+    /// True if the text contains letters only the other layout types.
+    func containsOther(_ s: String) -> Bool {
+        s.unicodeScalars.contains { otherScalars.contains($0.value) }
     }
 
-    static var hebrewToEnglish: [Character: Character] {
-        layout == .pc ? pcHeToEn : appleHeToEn
+    /// Convert in whichever direction makes sense based on the detected script.
+    func convert(_ input: String) -> String {
+        let toEnglishDirection = containsOther(input)
+        let table = toEnglishDirection ? toEnglish : toOther
+        var out = ""
+        out.reserveCapacity(input.count)
+
+        for ch in input {
+            if let mapped = table[ch] {
+                out.append(mapped)
+            } else if !toEnglishDirection, let mapped = table[Character(ch.lowercased())] {
+                // Capitals with no shifted mapping share the lowercase key.
+                out.append(mapped)
+            } else {
+                // Digits, spaces, untouched punctuation: pass through.
+                out.append(ch)
+            }
+        }
+        return out
     }
 
-    enum Language { case hebrew, english }
+    enum Language { case english, other }
 
     /// Word-by-word conversion for mixed text. Each word is classified:
     ///  - keep:      a real word as typed only,
@@ -102,8 +114,8 @@ enum KeyboardConverter {
     /// When nothing is clearly in the wrong layout, or nothing is clearly
     /// right, this falls back to converting everything, since the user asked
     /// for a conversion.
-    static func smartConvert(_ input: String,
-                             isWord: (String, Language) -> Bool) -> String {
+    func smartConvert(_ input: String,
+                      isWord: (String, Language) -> Bool) -> String {
         enum Kind { case keep, convert, both, neither, noLetters }
 
         // Split into alternating word / whitespace runs, keeping the
@@ -135,15 +147,15 @@ enum KeyboardConverter {
             }
         }
 
-        var out = ""
-        for (n, i) in words.enumerated() { tokens[i].text = shouldConvert[n] ? convert(tokens[i].text) : tokens[i].text }
-        for token in tokens { out += token.text }
-        return out
+        for (n, i) in words.enumerated() where shouldConvert[n] {
+            tokens[i].text = convert(tokens[i].text)
+        }
+        return tokens.map(\.text).joined()
 
         func classify(_ word: String) -> Kind {
             guard word.contains(where: \.isLetter) else { return .noLetters }
-            let lang: Language = containsHebrew(word) ? .hebrew : .english
-            let otherLang: Language = lang == .hebrew ? .english : .hebrew
+            let lang: Language = containsOther(word) ? .other : .english
+            let otherLang: Language = lang == .other ? .english : .other
             // As typed, only strip punctuation that stays punctuation after
             // conversion: in "ים'" the ' is the W key, part of the word.
             let core = trim(word) { !$0.isLetter && !convert(String($0)).contains(where: \.isLetter) }
@@ -152,8 +164,9 @@ enum KeyboardConverter {
             // "שלוםץ"), so also check the conversion of the letters alone.
             let lettersOnly = trim(convert(trim(word) { !$0.isLetter })) { !$0.isLetter }
 
-            let validAsTyped = valid(core, lang)
-            let validConverted = valid(converted, otherLang) || valid(lettersOnly, otherLang)
+            let validAsTyped = !core.isEmpty && isWord(core, lang)
+            let validConverted = (!converted.isEmpty && isWord(converted, otherLang)) ||
+                                 (!lettersOnly.isEmpty && isWord(lettersOnly, otherLang))
             switch (validAsTyped, validConverted) {
             case (true, false): return .keep
             case (false, true): return .convert
@@ -162,58 +175,8 @@ enum KeyboardConverter {
             }
         }
 
-        func valid(_ word: String, _ lang: Language) -> Bool {
-            // Single Hebrew letters (ו, ה, ש...) are prefixes, not words, but
-            // the spell checker accepts them.
-            if lang == .hebrew && word.count < 2 { return false }
-            return !word.isEmpty && isWord(word, lang)
-        }
-
         func trim(_ s: String, _ strip: (Character) -> Bool) -> String {
             String(s.drop(while: strip).reversed().drop(while: strip).reversed())
         }
-    }
-
-    /// True if the string contains any Hebrew code points (U+0590–U+05FF).
-    static func containsHebrew(_ s: String) -> Bool {
-        for scalar in s.unicodeScalars where (0x0590...0x05FF).contains(scalar.value) {
-            return true
-        }
-        return false
-    }
-
-    /// Convert in whichever direction makes sense based on detected script.
-    static func convert(_ input: String) -> String {
-        let useHebrewToEnglish = containsHebrew(input)
-        var table = useHebrewToEnglish ? hebrewToEnglish : englishToHebrew
-        if !useHebrewToEnglish {
-            // Smart quotes turn the ' key into a curly quote; it's still the
-            // ' key, which types a comma on Hebrew.
-            table["\u{2018}"] = ","
-            table["\u{2019}"] = ","
-        }
-        var out = String.UnicodeScalarView()
-        out.reserveCapacity(input.unicodeScalars.count)
-
-        for ch in input {
-            // Try the character exactly as typed first — this is what makes
-            // shifted symbols ( ) & " < > etc. map correctly.
-            if let mapped = table[ch] {
-                out.append(contentsOf: String(mapped).unicodeScalars)
-                continue
-            }
-            // English -> Hebrew: capital letters share a physical key with
-            // their lowercase form, so fall back to the lowercased character.
-            if !useHebrewToEnglish {
-                let lower = Character(ch.lowercased())
-                if lower != ch, let mapped = table[lower] {
-                    out.append(contentsOf: String(mapped).unicodeScalars)
-                    continue
-                }
-            }
-            // No mapping (digits, spaces, untouched punctuation): pass through.
-            out.append(contentsOf: String(ch).unicodeScalars)
-        }
-        return String(String.UnicodeScalarView(out))
     }
 }

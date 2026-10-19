@@ -1,14 +1,14 @@
-// Standalone test runner. Compile with:
-//   swiftc -o /tmp/kf_tests Sources/KeyboardConverter.swift Tests/main.swift
-//   /tmp/kf_tests
+// Standalone test runner. The conversion tables are read from the real macOS
+// keyboard layouts, so these tests check what the app will actually do.
+//
+//   ./test.sh
 
 import Foundation
 
 var failures = 0
 var passes = 0
 
-func check(_ name: String, _ input: String, _ expected: String) {
-    let got = KeyboardConverter.convert(input)
+func expect(_ name: String, _ got: String, _ expected: String, input: String) {
     if got == expected {
         passes += 1
         print("  ok   \(name): \(input.debugDescription) -> \(got.debugDescription)")
@@ -21,120 +21,94 @@ func check(_ name: String, _ input: String, _ expected: String) {
     }
 }
 
-print("\n== English -> Hebrew (every key in the table) ==")
-let englishKeys = "qwertyuiopasdfghjkl;zxcvbnm,./"
-for ch in englishKeys {
-    let s = String(ch)
-    let h = KeyboardConverter.convert(s)
-    let mapped = KeyboardConverter.englishToHebrew[ch].map { String($0) } ?? "?"
-    if h == mapped {
-        passes += 1
-        print("  ok   \(s) -> \(h)")
-    } else {
-        failures += 1
-        print("  FAIL \(s) expected \(mapped) got \(h)")
+func layout(_ other: String) -> LayoutPair {
+    guard let pair = InputSources.pair(englishID: "com.apple.keylayout.ABC",
+                                       otherID: "com.apple.keylayout.\(other)") else {
+        fatalError("layout \(other) not installed")
     }
+    return pair
 }
 
-print("\n== Hebrew -> English (every Hebrew letter in the table) ==")
-for (eng, heb) in KeyboardConverter.englishToHebrew {
-    // Only test entries whose Hebrew side is actually in the Hebrew Unicode
-    // block — otherwise auto-detect treats them as English direction.
-    guard let scalar = String(heb).unicodeScalars.first,
-          (0x0590...0x05FF).contains(scalar.value) else { continue }
-    let s = String(heb)
-    let back = KeyboardConverter.convert(s)
-    if back == String(eng) {
-        passes += 1
-        print("  ok   \(heb) -> \(back)")
-    } else {
-        failures += 1
-        print("  FAIL \(heb) expected \(eng) got \(back)")
-    }
+var pair = layout("Hebrew")
+func check(_ name: String, _ input: String, _ expected: String) {
+    expect(name, pair.convert(input), expected, input: input)
 }
 
-print("\n== Geresh / gershayim ==")
-check("geresh standalone",    "\u{05F3}", "w")
-check("gershayim standalone", "\u{05F4}", "\"")
-// Curly quotes only get mapped when surrounded by Hebrew (real-world case).
-check("curly ’ in Hebrew context",
-      "\u{05D9}\u{05DD}\u{2019}", "how")
-check("curly ” in Hebrew context",
-      "\u{05E9}\u{201D}\u{05D7}", "a\"j")
+// MARK: - Apple "Hebrew"
 
-print("\n== Real phrases ==")
-check("how are you (geresh)",
-      "\u{05D9}\u{05DD}\u{05F3} \u{05E9}\u{05E8}\u{05E7} \u{05D8}\u{05DD}\u{05D5}",
-      "how are you")
-check("שלום -> akuo", "\u{05E9}\u{05DC}\u{05D5}\u{05DD}", "akuo")
-check("hello typed in Hebrew",
-      "\u{05D9}\u{05E7}\u{05DA}\u{05DA}\u{05DD}", "hello")
-check("uppercase Hello", "Hello", KeyboardConverter.convert("hello"))
-check("digits and spaces pass through",
-      "abc 123 xyz", "\u{05E9}\u{05E0}\u{05D1} 123 \u{05E1}\u{05D8}\u{05D6}")
+print("\n== Hebrew: every letter key, both directions ==")
+let letters: [(String, String)] = [
+    ("q", "/"), ("e", "ק"), ("r", "ר"), ("t", "א"), ("y", "ט"), ("u", "ו"), ("i", "ן"),
+    ("o", "ם"), ("p", "פ"), ("a", "ש"), ("s", "ד"), ("d", "ג"), ("f", "כ"), ("g", "ע"),
+    ("h", "י"), ("j", "ח"), ("k", "ל"), ("l", "ך"), (";", "ף"), ("z", "ז"), ("x", "ס"),
+    ("c", "ב"), ("v", "ה"), ("b", "נ"), ("n", "מ"), ("m", "צ"), (",", "ת"), (".", "ץ"),
+    ("/", "."), ("'", ","),
+]
+for (en, he) in letters {
+    check("en->he \(en)", en, he)
+    // Hebrew -> English needs Hebrew context: punctuation alone reads as English.
+    check("he->en \(he)", "ש" + he, "a" + en)
+}
 
-print("\n== Punctuation ==")
-check("comma",  ",", "\u{05EA}")
-check("period", ".", "\u{05E5}")
-check("semi",   ";", "\u{05E3}")
-// q, w, /, ' are intentionally not roundtrippable: both sides land in ASCII,
-// so auto-detect cannot tell which direction to go for short inputs.
-check("q (single char goes en->he)", "q", "/")
-check("/ (single char goes en->he)", "/", ".")
+print("\n== Hebrew: punctuation and shifted keys ==")
+check("w -> geresh", "w", "\u{05F3}")
+check("brackets swap", "[]", "][")
+check("parens swap", "(x)", ")ס(")
+check("< > swap", "<>", "><")
+check("& -> shekel", "&", "\u{20AA}")
+check("doublequote -> gershayim", "\"", "\u{05F4}")
+check("backtick -> semicolon", "`", ";")
+check("capitals share the key", "Hello", "יקךךם")
+check("shifted D is not „", "D", "ג")
+check("digits and spaces pass through", "abc 123", "שנב 123")
 
-print("\n== Full keyboard: extra base keys (en->he) ==")
-check("apostrophe -> comma", "'", ",")           // ' key on Hebrew = comma
-check("w -> geresh",         "w", "\u{05F3}")     // ׳ HEBREW PUNCTUATION GERESH
-check("backtick -> semicolon", "`", ";")          // ` key on Hebrew = ;
-check("[ -> ]",  "[", "]")                        // brackets are swapped
-check("] -> [",  "]", "[")
-check("backslash -> rafe", "\\", "\u{05BF}")      // ֿ HEBREW POINT RAFE
+print("\n== Hebrew: back to English ==")
+check("how are you (geresh)", "ים\u{05F3} שרק טםו", "how are you")
+check("plain ' is also w", "ים' שרק טםו", "how are you")
+check("curly quote is also w", "ים\u{2019}", "how")
+check("gershayim -> \"", "ש\u{05F4}ח", "a\"j")
+check("shekel -> &", "ש\u{20AA}ל", "a&k")
+check("hello", "יקךךם", "hello")
 
-print("\n== Full keyboard: shifted symbols (en->he) ==")
-check("( -> )", "(", ")")                          // parens swapped (shift-9/0)
-check(") -> (", ")", "(")
-check("{ -> }", "{", "}")
-check("} -> {", "}", "{")
-check("< -> >", "<", ">")
-check("> -> <", ">", "<")
-check("& -> shekel", "&", "\u{20AA}")             // ₪ NEW SHEQEL SIGN
-check("doublequote -> gershayim", "\"", "\u{05F4}") // ״ HEBREW PUNCTUATION GERSHAYIM
+// MARK: - Hebrew-PC
 
-print("\n== Full keyboard: reverse, in Hebrew context (he->en) ==")
-// A real Hebrew-layout sentence: letters set the direction, symbols ride along.
-check("shekel back to &", "\u{05E9}\u{20AA}\u{05DC}", "a&k")   // ש₪ל -> a&k
-check("paren back to (",  "\u{05E9})\u{05DC}", "a(k")          // ש)ל -> a(k
-check("comma back to apostrophe", "\u{05E9},\u{05DC}", "a'k")  // ש,ל -> a'k
+print("\n== Hebrew-PC (W types a plain apostrophe) ==")
+pair = layout("Hebrew-PC")
+check("w -> '", "w", "'")
+check("' key -> comma", "'", ",")
+check("comma -> tav", ",", "ת")
+check("how are you", "how are you", "ים' שרק טםו")
+check("back to how are you", "ים' שרק טםו", "how are you")
+check("tav and comma back", "ש,ת", "a',")
+check("smart-quoted w back", "ים\u{2018}", "how")
+check("smart-quoted ' key -> comma", "a\u{2019}b", "ש,נ")
+check("backtick -> backslash", "`", "\\")
+check("& unchanged", "&", "&")
 
-print("\n== Hebrew-PC layout (W key types a plain apostrophe) ==")
-KeyboardConverter.layout = .pc
-check("PC: w -> apostrophe", "w", "'")
-check("PC: apostrophe key -> comma", "'", ",")
-check("PC: comma -> tav", ",", "\u{05EA}")
-check("PC: how are you", "how are you",
-      "\u{05D9}\u{05DD}' \u{05E9}\u{05E8}\u{05E7} \u{05D8}\u{05DD}\u{05D5}")
-check("PC: back to how are you",
-      "\u{05D9}\u{05DD}' \u{05E9}\u{05E8}\u{05E7} \u{05D8}\u{05DD}\u{05D5}", "how are you")
-check("PC: tav and comma back", "\u{05E9},\u{05EA}", "a',")  // ש,ת -> a',
-check("PC: smart-quoted w back", "\u{05D9}\u{05DD}\u{2018}", "how")
-check("PC: smart-quoted ' key -> comma", "a\u{2019}b", "\u{05E9},\u{05E0}")
-check("PC: backtick -> backslash", "`", "\\")
-check("PC: & unchanged", "&", "&")
-check("PC: \" unchanged", "\"", "\"")
-KeyboardConverter.layout = .apple
+// MARK: - Other languages
+
+print("\n== Russian (generated the same way) ==")
+pair = layout("Russian")
+check("ghbdtn -> привет", "ghbdtn", "привет")
+check("capitals stay capital", "Ghbdtn", "Привет")
+check("back to English", "руддщ", "hello")
+expect("language code", pair.otherLanguage, "ru", input: "Russian")
+
+print("\n== Arabic ==")
+pair = layout("Arabic")
+expect("language code", pair.otherLanguage, "ar", input: "Arabic")
+expect("round trip", pair.convert(pair.convert("hello")), "hello", input: "hello")
+
+// MARK: - Smart conversion
 
 print("\n== Smart (word-by-word) conversion ==")
+pair = layout("Hebrew-PC")
 // A tiny fake dictionary stands in for the system spell checker.
-let dict: Set<String> = ["bang", "want", "to", "אם", "today", "שלום", "מה", "נשמע", "hello", "how", "are", "you", "ים", "I", "love", "אני", "שבת", "the", "price", "בלחם"]
+let dict: Set<String> = ["bang", "want", "to", "אם", "today", "שלום", "מה", "נשמע",
+                         "hello", "how", "are", "you", "ים", "I", "love", "אני",
+                         "שבת", "the", "price", "בלחם"]
 func smart(_ name: String, _ input: String, _ expected: String) {
-    let got = KeyboardConverter.smartConvert(input) { w, _ in dict.contains(w) }
-    if got == expected {
-        passes += 1
-        print("  ok   \(name): \(input.debugDescription) -> \(got.debugDescription)")
-    } else {
-        failures += 1
-        print("  FAIL \(name): \(input.debugDescription) expected \(expected.debugDescription) got \(got.debugDescription)")
-    }
+    expect(name, pair.smartConvert(input) { w, _ in dict.contains(w) }, expected, input: input)
 }
 smart("mixed: hebrew + wrong english", "שלום nv bang", "שלום מה נשמע")
 smart("mixed: english + wrong hebrew", "hello שרק you", "hello are you")
