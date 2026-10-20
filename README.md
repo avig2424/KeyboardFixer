@@ -72,8 +72,11 @@ Xcode project and no dependencies.
 
 `swift tools/make_icon.swift` regenerates `Resources/AppIcon.icns`.
 
-Each rebuild changes the app's signature, so macOS may need Accessibility
-turned off and on again for KeyboardFixer.
+`build.sh` signs with a code-signing certificate named
+**KeyboardFixer Signing** if your keychain has one. Every build then has the
+same identity, so macOS keeps the Accessibility permission across rebuilds and
+updates. Without it, builds are signed ad-hoc and Accessibility has to be
+re-granted after each rebuild.
 
 ## Files
 

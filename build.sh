@@ -28,9 +28,19 @@ swiftc \
     -o "$MACOS/$APP_NAME" \
     Sources/*.swift
 
-# Ad-hoc sign so the bundle has a code identity. Without this every
-# rebuild looks like a brand-new binary to TCC and Accessibility breaks.
-codesign --force --deep --sign - "$APP_DIR" 2>/dev/null
+# Sign with the "KeyboardFixer Signing" certificate if this Mac has it, so
+# every build has the same identity and macOS keeps the Accessibility
+# permission across rebuilds and updates. Otherwise sign ad-hoc (works, but
+# Accessibility has to be re-granted after each rebuild).
+IDENTITY=$(security find-identity -p codesigning 2>/dev/null \
+    | awk '/"KeyboardFixer Signing"/ { print $2; exit }')
+if [ -n "$IDENTITY" ]; then
+    codesign --force --deep --sign "$IDENTITY" "$APP_DIR"
+    echo "Signed with KeyboardFixer Signing"
+else
+    codesign --force --deep --sign - "$APP_DIR" 2>/dev/null
+    echo "Signed ad-hoc (no KeyboardFixer Signing certificate found)"
+fi
 
 echo
 echo "Built: $APP_DIR"
