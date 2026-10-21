@@ -6,3 +6,7 @@ build/
 
 # Test binaries
 /tmp/kf_tests
+
+# Signing certificates and keys — never commit
+*.p12
+*.pem
