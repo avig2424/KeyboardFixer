@@ -54,7 +54,7 @@ final class SetupWindowController: NSWindowController {
         let intro = wrapping("""
             Typed “akuo” when you meant “שלום”? Select the text and press the \
             shortcut — KeyboardFixer rewrites it as if you’d typed it in the right \
-            keyboard layout. Nothing leaves your Mac.
+            keyboard layout. Your text never leaves your Mac.
             """)
 
         let step1 = heading("1. Allow Accessibility access")

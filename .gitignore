@@ -10,3 +10,6 @@ build/
 # Signing certificates and keys — never commit
 *.p12
 *.pem
+
+# Sparkle key backups
+key-backup*.txt

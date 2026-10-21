@@ -1,5 +1,6 @@
 import AppKit
 import ServiceManagement
+import Sparkle
 
 /// The Settings window: shortcut, second language, and behaviour options.
 /// Every change applies immediately.
@@ -16,9 +17,12 @@ final class SettingsWindowController: NSWindowController {
     private let smartCheckbox = NSButton(checkboxWithTitle: "Fix mixed text word by word", target: nil, action: nil)
     private let switchCheckbox = NSButton(checkboxWithTitle: "Switch keyboard after converting", target: nil, action: nil)
     private let loginCheckbox = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
+    private let updatesCheckbox = NSButton(checkboxWithTitle: "Check for updates automatically", target: nil, action: nil)
+    private let updater: SPUUpdater
     private var layouts: [InputSources.Layout] = []
 
-    init() {
+    init(updater: SPUUpdater) {
+        self.updater = updater
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 300),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "KeyboardFixer Settings"
@@ -53,7 +57,7 @@ final class SettingsWindowController: NSWindowController {
         noSelectionPopup.target = self
         noSelectionPopup.action = #selector(noSelectionChanged)
 
-        for box in [smartCheckbox, switchCheckbox, loginCheckbox] {
+        for box in [smartCheckbox, switchCheckbox, loginCheckbox, updatesCheckbox] {
             box.target = self
             box.action = #selector(checkboxChanged(_:))
         }
@@ -66,6 +70,7 @@ final class SettingsWindowController: NSWindowController {
             [NSGridCell.emptyContentView, note("Only the words typed in the wrong language are changed; the rest stays as it is.")],
             [NSGridCell.emptyContentView, switchCheckbox],
             [NSGridCell.emptyContentView, loginCheckbox],
+            [NSGridCell.emptyContentView, updatesCheckbox],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.rowAlignment = .firstBaseline
@@ -116,6 +121,7 @@ final class SettingsWindowController: NSWindowController {
         switchCheckbox.state = Settings.switchKeyboard ? .on : .off
         loginCheckbox.state = LaunchAtLogin.isEnabled ? .on : .off
         loginCheckbox.isEnabled = LaunchAtLogin.isAvailable
+        updatesCheckbox.state = updater.automaticallyChecksForUpdates ? .on : .off
     }
 
     // MARK: - Actions
@@ -134,6 +140,7 @@ final class SettingsWindowController: NSWindowController {
         switch sender {
         case smartCheckbox: Settings.smartMode = on
         case switchCheckbox: Settings.switchKeyboard = on
+        case updatesCheckbox: updater.automaticallyChecksForUpdates = on
         case loginCheckbox:
             if !LaunchAtLogin.set(on) { sender.state = on ? .off : .on }
         default: break

@@ -24,8 +24,11 @@ Requires macOS 12 or later, on an Apple Silicon Mac (M1 or newer).
 
 ## Privacy
 
-- **Nothing leaves your Mac.** The app has no network code at all.
+- **Your text never leaves your Mac.**
 - Nothing is stored except your settings.
+- The only network access is a once-a-day update check against this GitHub
+  repository (you can turn it off in Settings). It sends nothing about you or
+  your text.
 - **Accessibility** access is used only to copy the selected text and paste
   the fixed version. Your clipboard is restored right afterwards.
 - **Password fields are never touched.**
@@ -57,7 +60,7 @@ Open **Settings…** from the **א/A** menu-bar icon:
 - **When nothing is selected**: convert the whole field, or only the current
   line. The current-line option uses ⌘⇧←/→ and may not work in every app.
 - **Fix mixed text word by word**, **Switch keyboard after converting**,
-  **Launch at login** (macOS 13+).
+  **Launch at login** (macOS 13+), **Check for updates automatically**.
 
 ## Build from source
 
@@ -67,8 +70,22 @@ Xcode project and no dependencies.
 ```bash
 ./build.sh        # → build/KeyboardFixer.app
 ./test.sh         # converter tests, using the real macOS layouts
-./release.sh      # → build/KeyboardFixer-<version>.dmg
+./release.sh      # → build/release/: the .dmg and appcast.xml
 ```
+
+### Publishing an update
+
+1. In `Info.plist`, raise `CFBundleShortVersionString` (e.g. 2.1 → 2.2) and
+   `CFBundleVersion` (e.g. 3 → 4).
+2. Run `./release.sh`.
+3. On GitHub, create a release tagged `v<version>` and attach both files from
+   `build/release/`.
+
+Installed copies check that feed daily (via [Sparkle](https://sparkle-project.org),
+in `Vendor/Sparkle`) and offer the update. Releases are signed with the
+"Private key for signing Sparkle updates" in your keychain; without it, you
+can't publish updates that existing installs will accept, so back it up
+(`Vendor/Sparkle/bin/generate_keys -x key-backup.txt`) somewhere safe.
 
 `swift tools/make_icon.swift` regenerates `Resources/AppIcon.icns`.
 

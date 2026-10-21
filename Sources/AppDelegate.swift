@@ -1,12 +1,16 @@
 import AppKit
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem!
     private var convertItem: NSMenuItem!
     private var hotkey: HotkeyManager!
+    /// Sparkle: checks GitHub for new versions once a day and offers to install.
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
     private lazy var settingsWindow: SettingsWindowController = {
-        let controller = SettingsWindowController()
+        let controller = SettingsWindowController(updater: updaterController.updater)
         controller.onShortcutChange = { [weak self] shortcut in self?.apply(shortcut) }
         controller.onRecordingChange = { [weak self] recording in
             // Pause the global shortcut so pressing it records instead of converting.
@@ -58,6 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(showSettings), key: ","))
         menu.addItem(item("Setup Guide…", #selector(showSetupAction)))
+        let updates = NSMenuItem(title: "Check for Updates…",
+                                 action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+                                 keyEquivalent: "")
+        updates.target = updaterController
+        menu.addItem(updates)
         menu.addItem(item("About KeyboardFixer", #selector(showAbout)))
         menu.addItem(.separator())
         menu.addItem(item("Quit KeyboardFixer", #selector(quitAction), key: "q"))
@@ -114,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         let credits = NSAttributedString(
-            string: "Fixes text typed in the wrong keyboard language.\nRuns entirely on your Mac — no network access.",
+            string: "Fixes text typed in the wrong keyboard language.\nYour text never leaves your Mac.",
             attributes: [.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
                          .foregroundColor: NSColor.secondaryLabelColor])
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])

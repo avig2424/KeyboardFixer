@@ -9,11 +9,17 @@
     <key>CFBundleIdentifier</key>
     <string>com.keyboardfixer.app</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>3</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.0</string>
+    <string>2.1</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>SUFeedURL</key>
+    <string>https://github.com/avig2424/KeyboardFixer/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>9YFqNS3/nAYCWAXvPjGpLTfd4aNvnvxfJeksncGFlqk=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Free to use and share.</string>
     <key>CFBundleExecutable</key>

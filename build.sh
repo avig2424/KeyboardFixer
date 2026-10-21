@@ -12,11 +12,15 @@ APP_DIR="$BUILD_DIR/$APP_NAME.app"
 CONTENTS="$APP_DIR/Contents"
 MACOS="$CONTENTS/MacOS"
 
+SPARKLE="Vendor/Sparkle/Sparkle.framework"
+
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS" "$CONTENTS/Resources"
+mkdir -p "$MACOS" "$CONTENTS/Resources" "$CONTENTS/Frameworks"
 
 cp Info.plist "$CONTENTS/Info.plist"
 cp Resources/AppIcon.icns "$CONTENTS/Resources/AppIcon.icns"
+# Sparkle (automatic updates). ditto keeps the framework's symlinks intact.
+ditto "$SPARKLE" "$CONTENTS/Frameworks/Sparkle.framework"
 
 # Compile all Swift sources into a single binary.
 swiftc \
@@ -25,6 +29,8 @@ swiftc \
     -framework AppKit \
     -framework Carbon \
     -framework ServiceManagement \
+    -F Vendor/Sparkle -framework Sparkle \
+    -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
     -o "$MACOS/$APP_NAME" \
     Sources/*.swift
 
@@ -34,11 +40,21 @@ swiftc \
 # Accessibility has to be re-granted after each rebuild).
 IDENTITY=$(security find-identity -p codesigning 2>/dev/null \
     | awk '/"KeyboardFixer Signing"/ { print $2; exit }')
+SIGN_AS="${IDENTITY:--}"   # "-" means ad-hoc
+
+# Sign inside-out: Sparkle's helpers, the framework, then the app, so every
+# piece carries the same identity (Sparkle checks this before updating).
+FW="$CONTENTS/Frameworks/Sparkle.framework/Versions/B"
+for item in "$FW/XPCServices/Installer.xpc" "$FW/XPCServices/Downloader.xpc" \
+            "$FW/Autoupdate" "$FW/Updater.app" "$CONTENTS/Frameworks/Sparkle.framework" \
+            "$APP_DIR"; do
+    # Keep Sparkle's own entitlements (its downloader is sandboxed).
+    codesign --force --preserve-metadata=entitlements --sign "$SIGN_AS" "$item"
+done
+
 if [ -n "$IDENTITY" ]; then
-    codesign --force --deep --sign "$IDENTITY" "$APP_DIR"
     echo "Signed with KeyboardFixer Signing"
 else
-    codesign --force --deep --sign - "$APP_DIR" 2>/dev/null
     echo "Signed ad-hoc (no KeyboardFixer Signing certificate found)"
 fi
 
