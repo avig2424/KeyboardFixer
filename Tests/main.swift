@@ -106,7 +106,9 @@ pair = layout("Hebrew-PC")
 // A tiny fake dictionary stands in for the system spell checker.
 let dict: Set<String> = ["bang", "want", "to", "אם", "today", "שלום", "מה", "נשמע",
                          "hello", "how", "are", "you", "ים", "I", "love", "אני",
-                         "שבת", "the", "price", "בלחם"]
+                         "שבת", "the", "price", "בלחם",
+                         "this", "is", "test",
+                         "k", "a"]  // the spell checker accepts lone English letters
 func smart(_ name: String, _ input: String, _ expected: String) {
     expect(name, pair.smartConvert(input) { w, _ in dict.contains(w) }, expected, input: input)
 }
@@ -121,6 +123,12 @@ smart("real-both word trailing after converted", "שלום nv bang", "שלום �
 smart("real-both word before a kept word stays", "I want to ckjo today", "I want to בלחם today")
 smart("numbers stay as typed", "the price 50, akuo", "the price 50, שלום")
 smart("all wrong layout", "nv bang", "מה נשמע")
+smart("lone letter follows its neighbours", "akuo k", "שלום ל")
+smart("lone 'a' follows its neighbours", "akuo a", "שלום ש")
+smart("lone letter between converted words", "akuo k bang", "שלום ל נשמע")
+smart("lone letter next to kept words stays", "I love akuo", "I love שלום")
+smart("lone letter at start follows the next word", "I want to ckjo today", "I want to בלחם today")
+smart("lone letter after a kept word stays", "this is a test akuo", "this is a test שלום")
 
 print("\n----")
 print("Passed: \(passes)   Failed: \(failures)")

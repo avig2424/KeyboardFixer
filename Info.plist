@@ -2,41 +2,41 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>KeyboardFixer</string>
-    <key>CFBundleDisplayName</key>
-    <string>KeyboardFixer</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.keyboardfixer.app</string>
-    <key>CFBundleVersion</key>
-    <string>3</string>
-    <key>CFBundleShortVersionString</key>
-    <string>2.1</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>SUFeedURL</key>
-    <string>https://github.com/avig2424/KeyboardFixer/releases/latest/download/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>9YFqNS3/nAYCWAXvPjGpLTfd4aNvnvxfJeksncGFlqk=</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Free to use and share.</string>
-    <key>CFBundleExecutable</key>
-    <string>KeyboardFixer</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>12.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSAccessibilityUsageDescription</key>
-    <string>KeyboardFixer needs Accessibility access to read the currently selected text and to send copy/paste keystrokes when you press the convert hotkey.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>KeyboardFixer sends keyboard events to convert text typed in the wrong keyboard layout.</string>
+	<key>CFBundleDisplayName</key>
+	<string>KeyboardFixer</string>
+	<key>CFBundleExecutable</key>
+	<string>KeyboardFixer</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.keyboardfixer.app</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>KeyboardFixer</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.2</string>
+	<key>CFBundleVersion</key>
+	<string>4</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>KeyboardFixer needs Accessibility access to read the currently selected text and to send copy/paste keystrokes when you press the convert hotkey.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>KeyboardFixer sends keyboard events to convert text typed in the wrong keyboard layout.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Free to use and share.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/avig2424/KeyboardFixer/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>9YFqNS3/nAYCWAXvPjGpLTfd4aNvnvxfJeksncGFlqk=</string>
 </dict>
 </plist>

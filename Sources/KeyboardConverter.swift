@@ -105,10 +105,13 @@ struct LayoutPair {
     ///  - convert:   a real word only after conversion,
     ///  - both:      a real word either way (short words like "to" / "אם"),
     ///  - neither:   not a real word either way (names, typos, slang),
+    ///  - lone:      a single letter ("k", "a", "ו"),
     ///  - no letters (numbers, lone punctuation): always left as typed.
     /// "both" words stay as typed, unless they sit between converted words or
     /// trail after one (you kept typing in the wrong layout up to the cursor).
-    /// "neither" words follow their neighbours.
+    /// "neither" words follow their neighbours. A lone letter says nothing
+    /// about the language, so it follows the word right before it (or right
+    /// after, at the start of the text).
     ///
     /// `isWord` is the dictionary lookup (the system spell checker in the app).
     /// When nothing is clearly in the wrong layout, or nothing is clearly
@@ -116,7 +119,7 @@ struct LayoutPair {
     /// for a conversion.
     func smartConvert(_ input: String,
                       isWord: (String, Language) -> Bool) -> String {
-        enum Kind { case keep, convert, both, neither, noLetters }
+        enum Kind { case keep, convert, both, neither, lone, noLetters }
 
         // Split into alternating word / whitespace runs, keeping the
         // whitespace exactly as it was.
@@ -147,6 +150,13 @@ struct LayoutPair {
             }
         }
 
+        let real = kinds.indices.filter { kinds[$0] != .lone && kinds[$0] != .noLetters }
+        for i in kinds.indices where kinds[i] == .lone {
+            if let neighbour = real.last(where: { $0 < i }) ?? real.first(where: { $0 > i }) {
+                shouldConvert[i] = shouldConvert[neighbour]
+            }
+        }
+
         for (n, i) in words.enumerated() where shouldConvert[n] {
             tokens[i].text = convert(tokens[i].text)
         }
@@ -154,6 +164,7 @@ struct LayoutPair {
 
         func classify(_ word: String) -> Kind {
             guard word.contains(where: \.isLetter) else { return .noLetters }
+            if word.filter(\.isLetter).count == 1 { return .lone }
             let lang: Language = containsOther(word) ? .other : .english
             let otherLang: Language = lang == .other ? .english : .other
             // As typed, only strip punctuation that stays punctuation after
